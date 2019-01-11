@@ -6,53 +6,54 @@
 package kotlin.collections
 
 internal fun <T> sortArrayWith(array: Array<out T>, comparison: (T, T) -> Int) {
-    if (stableSortingIsSupported) {
+    if (getStableSortingIsSupported()) {
         array.asDynamic().sort(comparison)
     } else {
-        @Suppress("UNCHECKED_CAST")
-        mergeSort(array as Array<T>, 0, array.lastIndex, Comparator(comparison))
+        mergeSort(array.unsafeCast<Array<T>>(), 0, array.lastIndex, Comparator(comparison))
     }
 }
 
 internal fun <T> sortArrayWith(array: Array<out T>, comparator: Comparator<in T>) {
-    if (stableSortingIsSupported) {
+    if (getStableSortingIsSupported()) {
         val comparison = { a: T, b: T -> comparator.compare(a, b) }
         array.asDynamic().sort(comparison)
     } else {
-        @Suppress("UNCHECKED_CAST")
-        mergeSort(array as Array<T>, 0, array.lastIndex, comparator)
+        mergeSort(array.unsafeCast<Array<T>>(), 0, array.lastIndex, comparator)
     }
 }
 
 internal fun <T : Comparable<T>> sortArray(array: Array<out T>) {
-    if (stableSortingIsSupported) {
+    if (getStableSortingIsSupported()) {
         val comparison = { a: T, b: T -> a.compareTo(b) }
         array.asDynamic().sort(comparison)
     } else {
-        @Suppress("UNCHECKED_CAST")
-        mergeSort(array as Array<T>, 0, array.lastIndex, naturalOrder())
+        mergeSort(array.unsafeCast<Array<T>>(), 0, array.lastIndex, naturalOrder())
     }
 }
 
-private val stableSortingIsSupported: Boolean by lazy isStable@{
+private var _stableSortingIsSupported: Boolean? = null
+private fun getStableSortingIsSupported(): Boolean {
+    _stableSortingIsSupported?.let { return it }
+    _stableSortingIsSupported = false
+
     val array = js("[]").unsafeCast<Array<Int>>()
     // known implementations may use stable sort for arrays of up to 512 elements
     // so we create slightly more elements to test stability
-    for (index in 0 until 600) array.asDynamic().push(index * 4 + kotlin.random.Random.nextInt(4))
+    for (index in 0 until 600) array.asDynamic().push(index * 4 + js("(Math.random() * 4) | 0").unsafeCast<Int>())
     val comparison = { a: Int, b: Int -> (a and 3) - (b and 3) }
     array.asDynamic().sort(comparison)
     for (index in 1 until array.size) {
         val a = array[index - 1]
         val b = array[index]
-        if ((a and 3) == (b and 3) && (a / 4) >= (b / 4)) return@isStable false
+        if ((a and 3) == (b and 3) && (a / 4) >= (b / 4)) return false
     }
-    return@isStable true
+    _stableSortingIsSupported = true
+    return true
 }
 
 
 private fun <T> mergeSort(array: Array<T>, start: Int, endInclusive: Int, comparator: Comparator<in T>) {
-    @Suppress("UNCHECKED_CAST")
-    val buffer = arrayOfNulls<Any?>(array.size) as Array<T>
+    val buffer = arrayOfNulls<Any?>(array.size).unsafeCast<Array<T>>()
     val result = mergeSort(array, buffer, start, endInclusive, comparator)
     if (result !== array) {
         result.forEachIndexed { i, v -> array[i] = v }
